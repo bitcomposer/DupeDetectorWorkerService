@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 
 namespace DupeDetectorWorkerService.database
 {
@@ -7,7 +8,6 @@ namespace DupeDetectorWorkerService.database
         public DupeDBContext(DbContextOptions<DupeDBContext> options)
         : base(options)
         {
-            //Database.SetInitializer(new MigrateDatabaseToLatestVersion<DupeDBContext, Configuration>());
         }
 
         public DbSet<DuplicateFile> DuplicateFile { get; set; }
@@ -23,8 +23,13 @@ public class DuplicateFile
         FileName = fileName;
         Md5CheckSum = md5CheckSum;
     }
-
+    [Key]
+    [Required]
     public Guid DuplicateFileId { get; set; }
+
+    [Required]
     public string FileName { get; set; }
+
+    [Required]
     public string Md5CheckSum { get; set; }
 }

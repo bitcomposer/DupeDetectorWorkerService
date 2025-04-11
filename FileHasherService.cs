@@ -35,7 +35,7 @@ namespace DupeDetectorWorkerService
             _connString = _config.GetSection("ConnectionStrings:DupeConn").Value ?? ""; // ConfigurationManager["DupeConn"].ConnectionString;
             _inFolder = _config.GetSection("AppSettings:InFolder").Value ?? "c:\\temp\\";
             _outFolder = _config.GetSection("AppSettings:OutFolder").Value ?? "c:\\temp\\";
-            _errorsFolder = _config.GetSection("AppSettings:ErrorsFolder").Value ?? "c:\\temp\\";
+            _errorsFolder = _config.GetSection("AppSettings:ErrorsFolder").Value ?? String.Empty;
 
             if (!_inFolder.EndsWith("\\"))
             {
@@ -94,15 +94,26 @@ namespace DupeDetectorWorkerService
                             {
                                 try
                                 {
-                                    await DataInsert(justFileName, hash);
-                                    string targetFilePath = Path.Combine(_outFolder, justFileName);
-
-                                    File.Copy(file.FullName, targetFilePath, true);
-                                    File.Delete(file.FullName);
-                                    Console.WriteLine(string.Format("File {0} was moved to output as it is a new file", justFileName));
-                                    if (_logger.IsEnabled(LogLevel.Information))
+                                    bool isError = await DataInsert(justFileName, hash);
+                                    if (isError == false)
                                     {
-                                        _logger.LogInformation(string.Format("File {0} was moved to output as it is a new file", justFileName));
+                                        string targetFilePath = Path.Combine(_outFolder, justFileName);
+
+                                        File.Copy(file.FullName, targetFilePath, true);
+                                        File.Delete(file.FullName);
+                                        Console.WriteLine(string.Format("File {0} was moved to output as it is a new file", justFileName));
+                                        if (_logger.IsEnabled(LogLevel.Information))
+                                        {
+                                            _logger.LogInformation(string.Format("File {0} was moved to output as it is a new file", justFileName));
+                                        }
+                                    }
+                                    else
+                                    {
+                                        File.Delete(file.FullName);
+                                        if (_logger.IsEnabled(LogLevel.Error))
+                                        {
+                                            _logger.LogError(string.Format("File {0} caused an error on DB insertion and has been deleted.", justFileName));
+                                        }
                                     }
                                 }
                                 catch (Exception exception)
