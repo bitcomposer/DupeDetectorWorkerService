@@ -1,28 +1,32 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using DupeDetectorWorkerService.database;
+using Microsoft.EntityFrameworkCore;
 
 namespace DupeDetectorWorkerService
 {
     public class FileHasherService
     {
-        public static IConfiguration? _config { get; private set; }
-        public static ILogger<FileHasherService> _logger { get; private set; }
+        public IConfiguration? _config { get; private set; }
+        public ILogger<FileHasherService> _logger { get; private set; }
         private string _connString;
-        private static string _inFolder;
-        private static string _outFolder;
-        private static string _errorsFolder;
+        private string _inFolder;
+        private string _outFolder;
+        private string _errorsFolder;
         private volatile bool _stayInLoop;
         private bool _filePathError;
+        IDbContextFactory<DupeDBContext> _dupeDbContextFactory;
 
-        public FileHasherService(ILogger<FileHasherService> logger)
+        public FileHasherService(ILogger<FileHasherService> logger, IDbContextFactory<DupeDBContext> dupeDbContextFactory)
         {
             _stayInLoop = true;
             _logger = logger;
+
+            _dupeDbContextFactory = dupeDbContextFactory;
+
+            using (var dbContext = _dupeDbContextFactory.CreateDbContext())
+            {
+
+                dbContext.Database.Migrate();
+            }
 
             _config = new ConfigurationBuilder()
                 .AddJsonFile("appsettings.json")
@@ -53,7 +57,7 @@ namespace DupeDetectorWorkerService
             _stayInLoop = false;
         }
 
-        public void DoLoop()
+        public async void DoLoop()
         {
             if (_filePathError)
             {
@@ -90,7 +94,7 @@ namespace DupeDetectorWorkerService
                             {
                                 try
                                 {
-                                    DataInsert(justFileName, hash);
+                                    await DataInsert(justFileName, hash);
                                     string targetFilePath = Path.Combine(_outFolder, justFileName);
 
                                     File.Copy(file.FullName, targetFilePath, true);
@@ -98,7 +102,7 @@ namespace DupeDetectorWorkerService
                                     Console.WriteLine(string.Format("File {0} was moved to output as it is a new file", justFileName));
                                     if (_logger.IsEnabled(LogLevel.Information))
                                     {
-                                        _logger.Info(string.Format("File {0} was moved to output as it is a new file", justFileName));
+                                        _logger.LogInformation(string.Format("File {0} was moved to output as it is a new file", justFileName));
                                     }
                                 }
                                 catch (Exception exception)
@@ -223,12 +227,34 @@ namespace DupeDetectorWorkerService
 
         }
 
-        protected void DataInsert(string fileName, string md5CheckSum)
-        { }
+        protected async Task<bool> DataInsert(string fileName, string md5CheckSum)
+        {
+            bool isError = false;
+            try
+            {
+                DuplicateFile dupeFile = new DuplicateFile(fileName, md5CheckSum);
+
+                using (var dbContext = _dupeDbContextFactory.CreateDbContext())
+                {
+                    await dbContext.AddAsync(dupeFile);
+
+                    await dbContext.SaveChangesAsync();
+                }
+            }
+            catch (Exception)
+            {
+                isError = true;
+            }
+            return isError;
+        }
 
         protected bool ItemExistsInDB(string fileName, string hash)
         {
             bool ret = false;
+            using (var dbContext = _dupeDbContextFactory.CreateDbContext())
+            {
+                ret = dbContext.DuplicateFile.Where(a => a.FileName == fileName && a.Md5CheckSum == hash).Any();
+            }
 
             return ret;
         }

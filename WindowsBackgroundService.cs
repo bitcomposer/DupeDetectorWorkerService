@@ -11,11 +11,12 @@ namespace DupeDetectorWorkerService
             {
                 if (logger.IsEnabled(LogLevel.Information))
                 {
-                    logger.LogInformation("WindowsBackgroundService running at: {time}", DateTimeOffset.Now);
+                    logger.LogInformation("The DupeDetector Service running at: {time}", DateTimeOffset.Now);
                 }
-                
+
                 if (stoppingToken.IsCancellationRequested)
                 {
+                    logger.LogInformation("The DupeDetector Service stop requested at: {time}", DateTimeOffset.Now);
                     fileHasherService.RequestStop();
                 }
 
